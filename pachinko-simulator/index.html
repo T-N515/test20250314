@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <h1>パチスロWebシミュレーター</h1>
-        
+
         <div class="game-container">
             <div class="reels-container">
                 <div class="reel" id="reel0">
@@ -22,12 +22,12 @@
                     <div class="reel-inner"></div>
                 </div>
             </div>
-            
+
             <div class="credit-display">
                 <div class="credit-label">クレジット</div>
                 <div id="credit">1000</div>
             </div>
-            
+
             <div class="controls">
                 <div class="betting-controls">
                     <button id="bet-button" class="control-button">BET</button>
@@ -40,7 +40,7 @@
                     <button id="stop-button-2" class="control-button stop-button">ストップ3</button>
                 </div>
             </div>
-            
+
             <div class="info-panel">
                 <div class="info-item">
                     <span class="info-label">設定: </span>
@@ -61,12 +61,12 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="graph-container">
             <h2>スランプグラフ</h2>
             <canvas id="slump-graph"></canvas>
         </div>
-        
+
         <div id="settings-modal" class="modal">
             <div class="modal-content">
                 <h2>設定選択</h2>
@@ -91,7 +91,7 @@
     <script src="js/database.js"></script>
     <script src="js/graph.js"></script>
     <script src="js/main.js"></script>
-    
+
     <script>
         // DOMContentLoaded後にリール画像を読み込む
         document.addEventListener('DOMContentLoaded', function() {
@@ -100,4 +100,4 @@
         });
     </script>
 </body>
-</html> 
+</html>

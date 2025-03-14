@@ -175,6 +175,12 @@ h1 {
     transform: scale(0.95);
 }
 
+#start-button:disabled {
+    background-color: #777;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .stop-buttons {
     display: flex;
     gap: 15px;

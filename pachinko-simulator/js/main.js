@@ -39,7 +39,7 @@ let pendingGraphUpdate = false;
  */
 async function init() {
     if (isInitialized) return;
-    
+
     // DOM要素の取得
     creditDisplay = document.getElementById('credit');
     gameCountDisplay = document.getElementById('game-count');
@@ -59,34 +59,34 @@ async function init() {
     settingButtons = document.querySelectorAll('.setting-button');
     resetDataButton = document.getElementById('reset-data-button');
     closeSettingsButton = document.getElementById('close-settings');
-    
+
     // リール要素の取得
     reelElements = [
         document.getElementById('reel0').querySelector('.reel-inner'),
         document.getElementById('reel1').querySelector('.reel-inner'),
         document.getElementById('reel2').querySelector('.reel-inner')
     ];
-    
+
     // クラスのインスタンス化
     slotMachine = new SlotMachine();
     slotDatabase = new SlotDatabase();
     slumpGraph = new SlumpGraph('slump-graph');
-    
+
     // データのロード
     await loadData();
-    
+
     // リールのスタイル設定
     updateReelStyles();
-    
+
     // イベントリスナーの設定
     setupEventListeners();
-    
+
     // UIの更新
     updateUI();
-    
+
     // アニメーションの開始
     requestAnimationFrame(renderLoop);
-    
+
     isInitialized = true;
     console.log('パチスロシミュレーター初期化完了');
 }
@@ -109,13 +109,13 @@ async function loadData() {
             slotMachine.atGamesRemaining = savedData.atGamesRemaining;
             slotMachine.bonusType = savedData.bonusType;
             slotMachine.bonusGamesRemaining = savedData.bonusGamesRemaining;
-            
+
             console.log('保存データをロードしました');
         }
-        
+
         // グラフ初期化（まずは空のグラフを表示）
         slumpGraph.init();
-        
+
         // ゲーム履歴のロードとグラフの描画（非同期で処理してUIブロッキングを防止）
         setTimeout(async () => {
             try {
@@ -148,7 +148,7 @@ function setupEventListeners() {
     // BETボタン
     betButton.addEventListener('click', () => {
         console.log('BETボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState);
-        
+
         // ベット処理
         const betPlaced = slotMachine.placeBet();
         if (betPlaced) {
@@ -162,11 +162,11 @@ function setupEventListeners() {
             console.error('ベットできませんでした。状態:', slotMachine.gameState, '残りクレジット:', slotMachine.credit);
         }
     });
-    
+
     // レバーボタン
     leverButton.addEventListener('click', () => {
         console.log('レバーボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState);
-        
+
         // レバー操作処理
         const leverPulled = slotMachine.pullLever();
         if (leverPulled) {
@@ -182,12 +182,32 @@ function setupEventListeners() {
             console.error('レバーを引けませんでした。状態:', slotMachine.gameState);
         }
     });
-    
+
     // スタートボタン（互換性のため残す）
     startButton.addEventListener('click', () => {
         // ゲーム状態をコンソールに出力してデバッグ
-        console.log('スタートボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState);
-        
+        console.log('スタートボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState, '無効化状態:', startButton.disabled);
+
+        // まず強制的に有効化（何らかの問題でdisabled属性が残っている場合に対応）
+        if (startButton.disabled) {
+            console.warn('スタートボタンが無効化されています。有効化します。');
+            startButton.disabled = false;
+
+            // すべてのリールが停止しているか確認
+            if (!slotMachine.allReelsStopped()) {
+                // リールが回転中の場合は強制停止
+                slotMachine.reels.forEach((reel, index) => {
+                    if (reel.isSpinning) {
+                        cancelAnimationFrame(reel.animationId);
+                        reel.isSpinning = false;
+                    }
+                });
+
+                // ゲーム状態をリセット
+                slotMachine.gameState = 'ready';
+            }
+        }
+
         // ゲームの開始を試みる
         const started = slotMachine.startGame();
         if (started) {
@@ -200,9 +220,10 @@ function setupEventListeners() {
             // BETボタンとレバーボタンを無効化
             betButton.disabled = true;
             leverButton.disabled = true;
+            console.log('スタートボタンを無効化しました。disabled =', startButton.disabled);
         } else {
             console.error('ゲームを開始できませんでした。状態:', slotMachine.gameState, '残りクレジット:', slotMachine.credit);
-            
+
             // エラーの場合、ゲーム状態をリセットして再試行できるようにする
             if (slotMachine.credit >= slotMachine.bet || slotMachine.currentWin?.isReplay) {
                 // ゲーム状態を強制的にリセット
@@ -223,78 +244,72 @@ function setupEventListeners() {
             updateUI();
         }
     });
-    
+
     // ストップボタン
     stopButtons.forEach((button, index) => {
         button.addEventListener('click', () => {
-            console.log(`ストップボタン ${index} がクリックされました。現在の状態:`, 
-                        slotMachine.gameState, 
-                        `リール${index}の回転状態:`, 
+            console.log(`ストップボタン ${index} がクリックされました。現在の状態:`,
+                        slotMachine.gameState,
+                        `リール${index}の回転状態:`,
                         slotMachine.reels[index].isSpinning);
-            
+
             // リール停止処理
             const stopped = slotMachine.stopReel(index);
-            
+
             // ボタンを無効化
             if (stopped || !slotMachine.reels[index].isSpinning) {
                 button.disabled = true;
             }
-            
+
             // すべてのリールが停止したか確認
             if (slotMachine.allReelsStopped()) {
                 console.log('すべてのリールが停止しました。ゲーム状態:', slotMachine.gameState);
-                
+
                 // データの保存
                 saveGameData();
-                
-                // BETボタンを有効化
-                betButton.disabled = false;
-                
-                // スタートボタン有効化（互換性のため）
-                startButton.disabled = false;
-                
-                // ゲーム状態の確認と修正
-                if (slotMachine.gameState !== 'ready') {
-                    console.warn('ゲーム状態が ready ではありません。強制的に ready に設定します。');
-                    slotMachine.gameState = 'ready';
-                }
-                
+
+                // ゲーム状態をreadyに戻す
+                slotMachine.gameState = 'ready';
+
+                // すべてのボタンの状態を明示的にリセット
+                enableStartButton();
+
                 // UIの更新
                 updateUI();
             }
         });
     });
-    
+
     // 設定ボタン
     settingsButton.addEventListener('click', () => {
         // 現在の設定をハイライト
         settingButtons.forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.setting) === slotMachine.currentSetting);
         });
-        
+
         // モーダルを表示
         settingsModal.style.display = 'flex';
     });
-    
+
     // 設定選択ボタン
     settingButtons.forEach(button => {
         button.addEventListener('click', () => {
             const setting = parseInt(button.dataset.setting);
             slotMachine.changeSetting(setting);
-            
+
             // ボタンのハイライト
             settingButtons.forEach(btn => {
                 btn.classList.toggle('active', parseInt(btn.dataset.setting) === setting);
             });
-            
+
             // UIの更新
             updateUI();
-            
+
             // データの保存
             slotDatabase.saveSlotData(slotMachine);
         });
     });
-    
+
     // データリセットボタン
     resetDataButton.addEventListener('click', async () => {
         if (confirm('すべてのゲームデータをリセットしますか？')) {
@@ -302,26 +317,26 @@ function setupEventListeners() {
             slotMachine.resetData();
             slotMachine.credit = 1000; // 初期クレジットをリセット
             updateUI();
-            
+
             // グラフのリセット
             slumpGraph.reset();
-            
+
             settingsModal.style.display = 'none';
         }
     });
-    
+
     // モーダルを閉じるボタン
     closeSettingsButton.addEventListener('click', () => {
         settingsModal.style.display = 'none';
     });
-    
+
     // モーダル外をクリックして閉じる
     settingsModal.addEventListener('click', (event) => {
         if (event.target === settingsModal) {
             settingsModal.style.display = 'none';
         }
     });
-    
+
     // キーボードショートカット
     document.addEventListener('keydown', (event) => {
         // スペースでスタート
@@ -329,7 +344,7 @@ function setupEventListeners() {
             event.preventDefault();
             startButton.click();
         }
-        
+
         // 1,2,3キーでストップボタン
         if (event.code === 'Digit1' && !stopButtons[0].disabled) {
             stopButtons[0].click();
@@ -340,34 +355,34 @@ function setupEventListeners() {
         if (event.code === 'Digit3' && !stopButtons[2].disabled) {
             stopButtons[2].click();
         }
-        
+
         // Rキーでリセット（エラー発生時の緊急対応用）
         if (event.code === 'KeyR' && event.ctrlKey) {
             event.preventDefault();
             console.log('強制リセットが実行されました');
-            
+
             // スロットマシンの状態をリセット
             slotMachine.forceReset();
-            
+
             // ボタン状態の更新
             disableStopButtons(true);
             startButton.disabled = false;
-            
+
             // UIの更新
             updateUI();
-            
+
             // 警告表示
             alert('ゲーム状態をリセットしました。スタートボタンを押して再開してください。');
         }
     });
-    
+
     // ウィンドウリサイズ時
     window.addEventListener('resize', () => {
         if (slumpGraph) {
             slumpGraph.resize();
         }
     });
-    
+
     // ページが再表示されたときのイベントリスナー
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden && pendingGraphUpdate === true) {
@@ -382,18 +397,18 @@ function setupEventListeners() {
 function updateUI() {
     // クレジット表示の更新
     creditDisplay.textContent = slotMachine.credit;
-    
+
     // ゲームカウント表示の更新
     gameCountDisplay.textContent = slotMachine.totalGames;
     bigCountDisplay.textContent = slotMachine.bigCount;
     regCountDisplay.textContent = slotMachine.regCount;
-    
+
     // 設定表示の更新
     currentSettingDisplay.textContent = slotMachine.currentSetting;
-    
+
     // ボタンの状態更新
     updateButtonStates();
-    
+
     // ボーナス時の演出
     if (slotMachine.bonusType) {
         document.body.classList.add('bonus-active');
@@ -402,7 +417,7 @@ function updateUI() {
     } else {
         document.body.classList.remove('bonus-active', 'big-bonus', 'reg-bonus');
     }
-    
+
     // AT中の演出
     document.body.classList.toggle('at-active', slotMachine.isAT);
 }
@@ -415,34 +430,47 @@ function updateButtonStates() {
     switch (slotMachine.gameState) {
         case 'ready':
             // ready状態ではBETボタンのみ有効
-            betButton.disabled = false;
-            leverButton.disabled = true;
-            startButton.disabled = false; // 互換性のため
+            setButtonState(betButton, false);
+            setButtonState(leverButton, true);
+            setButtonState(startButton, false); // 互換性のため
             disableStopButtons(true);
             break;
-            
+
         case 'bet_placed':
             // bet_placed状態ではレバーボタンのみ有効
-            betButton.disabled = true;
-            leverButton.disabled = false;
-            startButton.disabled = false; // 互換性のため
+            setButtonState(betButton, true);
+            setButtonState(leverButton, false);
+            setButtonState(startButton, false); // 互換性のため
             disableStopButtons(true);
             break;
-            
+
         case 'spinning':
             // spinning状態ではストップボタンのみ有効
-            betButton.disabled = true;
-            leverButton.disabled = true;
-            startButton.disabled = true;
+            setButtonState(betButton, true);
+            setButtonState(leverButton, true);
+            setButtonState(startButton, true);
             disableStopButtons(false);
             break;
-            
+
         default:
             // その他の状態（ボーナスなど）
-            betButton.disabled = true;
-            leverButton.disabled = true;
-            startButton.disabled = true;
+            setButtonState(betButton, true);
+            setButtonState(leverButton, true);
+            setButtonState(startButton, true);
             disableStopButtons(true);
+    }
+}
+
+/**
+ * ボタンの有効/無効状態を設定（より信頼性の高い方法）
+ */
+function setButtonState(button, disabled) {
+    if (disabled) {
+        button.disabled = true;
+        button.setAttribute('disabled', 'disabled');
+    } else {
+        button.disabled = false;
+        button.removeAttribute('disabled');
     }
 }
 
@@ -453,8 +481,8 @@ function disableStopButtons(disabled) {
     stopButtons.forEach((button, index) => {
         // リールが回転中でない場合は常に無効化
         const shouldDisable = disabled || !slotMachine.reels[index].isSpinning;
-        button.disabled = shouldDisable;
-        
+        setButtonState(button, shouldDisable);
+
         // デバッグ用
         if (disabled) {
             console.log(`ストップボタン ${index} を無効化しました`);
@@ -470,18 +498,18 @@ function disableStopButtons(disabled) {
 function updateReelStyles() {
     // グローバル変数として定義
     window.SYMBOL_HEIGHT = 50; // シンボルの高さ
-    
+
     const mockReelImage = new Image();
     mockReelImage.src = 'images/reel-symbols.png';
     mockReelImage.onload = () => {
         // リール画像のサイズに基づいて高さを調整
         const symbolHeight = mockReelImage.height / 6; // 6種類のシンボル
-        
+
         // CSSの変数を更新
         document.documentElement.style.setProperty('--symbol-height', `${symbolHeight}px`);
         window.SYMBOL_HEIGHT = symbolHeight;
     };
-    
+
     // リール画像が読み込めない場合のフォールバック
     mockReelImage.onerror = () => {
         console.warn('リール画像の読み込みに失敗しました。デフォルトの設定を使用します。');
@@ -496,18 +524,18 @@ async function saveGameData() {
     try {
         // スロットデータの保存
         await slotDatabase.saveSlotData(slotMachine);
-        
+
         // ゲーム履歴の保存（30ゲームおきに保存、ボーナス当選時は必ず保存）
         const shouldSaveHistory = slotMachine.totalGames % 30 === 0 || slotMachine.bonusType;
-        
+
         if (shouldSaveHistory) {
             await slotDatabase.saveGameHistory(slotMachine);
-            
+
             // グラフの更新（頻度を制限）
             const currentTime = Date.now();
             if (currentTime - lastGraphUpdateTime > GRAPH_UPDATE_INTERVAL) {
                 lastGraphUpdateTime = currentTime;
-                
+
                 // ページが表示されている場合のみグラフを更新
                 if (!document.hidden) {
                     updateGraphWithLatestData();
@@ -517,7 +545,7 @@ async function saveGameData() {
                 }
             }
         }
-        
+
         updateUI();
     } catch (error) {
         console.error('データ保存エラー:', error);
@@ -534,31 +562,31 @@ async function updateGraphWithLatestData() {
             console.log('グラフ更新中のため重複更新をスキップします');
             return;
         }
-        
+
         pendingGraphUpdate = 'updating';
-        
+
         // グラフの更新（非同期で実行して UI のブロッキングを防ぐ）
         setTimeout(async () => {
             try {
                 // データを取得
                 const historyData = await slotDatabase.getGameHistory();
-                
+
                 // チャートが存在するか確認
                 if (!slumpGraph.chart) {
                     slumpGraph.init();
                 }
-                
+
                 if (historyData && historyData.length > 0) {
                     // グラフデータを更新
                     slumpGraph.updateGraph(historyData);
-                    
+
                     // ボーナスマーカーを追加
                     slumpGraph.addBonusMarkers(historyData);
-                    
+
                     // 明示的にリサイズ処理を呼び出す
                     slumpGraph.resize();
                 }
-                
+
                 // 処理完了後にフラグをリセット
                 pendingGraphUpdate = false;
             } catch (error) {
@@ -577,18 +605,113 @@ async function updateGraphWithLatestData() {
  */
 function renderLoop(timestamp) {
     requestAnimationFrame(renderLoop);
-    
+
     // 前回のレンダリングから十分な時間が経過していない場合はスキップ
     if (timestamp - lastRenderTime < RENDER_INTERVAL) return;
-    
+
     lastRenderTime = timestamp;
-    
+
     // リールの位置を更新
     slotMachine.reels.forEach((reel, index) => {
         if (reel.isSpinning) {
             reelElements[index].style.transform = `translateY(-${reel.position}px)`;
         }
     });
+
+    // 定期的にゲーム状態をチェック（フリーズ対策）
+    if (timestamp % 1000 < 20) { // 約1秒ごとにチェック
+        checkGameState();
+    }
+}
+
+/**
+ * ゲーム状態をチェックして必要に応じてリセット
+ */
+function checkGameState() {
+    const allStopped = slotMachine.allReelsStopped();
+
+    // すべてのリールが停止しているのにゲーム状態がspinningのまま
+    if (allStopped && slotMachine.gameState === 'spinning') {
+        console.warn('不整合を検出: リールは停止しているがゲーム状態がspinningです。状態をリセットします。');
+        resetGameState();
+    }
+
+    // スタートボタンの状態チェック
+    if (allStopped && (slotMachine.gameState === 'ready' || slotMachine.gameState === 'bet_placed')) {
+        // スタートボタンが無効化されている場合は強制的に有効化
+        if (startButton.disabled || betButton.disabled) {
+            console.warn('不整合を検出: ゲーム準備完了状態なのにボタンが無効化されています。ボタン状態をリセットします。');
+            enableStartButton();
+            updateUI(); // UIを更新して確実に変更を反映
+        }
+    }
+
+    // ストップボタン状態の不整合チェック
+    if (slotMachine.gameState === 'spinning') {
+        let inconsistencyFound = false;
+        slotMachine.reels.forEach((reel, index) => {
+            if (reel.isSpinning && stopButtons[index].disabled) {
+                console.warn(`不整合を検出: リール${index}は回転中なのにストップボタンが無効化されています。`);
+                stopButtons[index].disabled = false;
+                inconsistencyFound = true;
+            }
+        });
+
+        if (inconsistencyFound) {
+            updateUI();
+        }
+    }
+}
+
+/**
+ * ゲーム状態を強制的にリセット
+ */
+function resetGameState() {
+    // リールの回転を強制停止
+    slotMachine.reels.forEach((reel, index) => {
+        if (reel.isSpinning) {
+            cancelAnimationFrame(reel.animationId);
+            reel.isSpinning = false;
+        }
+    });
+
+    // ゲーム状態をリセット
+    slotMachine.gameState = 'ready';
+
+    // ボタン状態をリセット
+    enableStartButton();
+    disableStopButtons(true);
+
+    // UIを更新
+    updateUI();
+
+    console.log('ゲーム状態を強制リセットしました');
+}
+
+/**
+ * スタートボタンを強制的に有効化する
+ */
+function enableStartButton() {
+    console.log('スタートボタンを有効化します。前の状態:', startButton.disabled);
+
+    // DOM操作での有効化
+    startButton.disabled = false;
+    startButton.removeAttribute('disabled');
+
+    // BETボタンも有効化（新しいゲームフロー用）
+    betButton.disabled = false;
+    betButton.removeAttribute('disabled');
+
+    // 連続して複数回有効化を試みる（ブラウザのレンダリングサイクルの問題対策）
+    for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+            startButton.disabled = false;
+            startButton.removeAttribute('disabled');
+            betButton.disabled = false;
+            betButton.removeAttribute('disabled');
+            console.log(`[${i}] スタートボタンを強制的に有効化しました。現在の状態:`, startButton.disabled);
+        }, i * 50); // 50ms間隔で3回実行
+    }
 }
 
 // DOMContentLoaded イベントでアプリケーションを初期化
@@ -601,12 +724,12 @@ function createDummyReelImage() {
     // リール要素にダミーのシンボル画像を追加する処理
     const symbols = ['🔔', '↺', '🍉', '🍒', 'BAR', '7'];
     const symbolHeight = window.SYMBOL_HEIGHT || 50;
-    
+
     for (let i = 0; i < 3; i++) {
         const reelInner = reelElements[i];
         reelInner.style.backgroundImage = 'none';
         reelInner.innerHTML = '';
-        
+
         // 各シンボルを20回（リールレイアウトに合わせる）
         for (let j = 0; j < REEL_LAYOUTS[i].length; j++) {
             const symbolValue = REEL_LAYOUTS[i][j];
@@ -619,4 +742,4 @@ function createDummyReelImage() {
             reelInner.appendChild(symbolElement);
         }
     }
-} 
+}
