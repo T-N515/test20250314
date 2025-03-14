@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>パチスロWebシミュレーター</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>パチスロWebシミュレーター</h1>
+        
+        <div class="game-container">
+            <div class="reels-container">
+                <div class="reel" id="reel0">
+                    <div class="reel-inner"></div>
+                </div>
+                <div class="reel" id="reel1">
+                    <div class="reel-inner"></div>
+                </div>
+                <div class="reel" id="reel2">
+                    <div class="reel-inner"></div>
+                </div>
+            </div>
+            
+            <div class="credit-display">
+                <div class="credit-label">クレジット</div>
+                <div id="credit">1000</div>
+            </div>
+            
+            <div class="controls">
+                <button id="start-button" class="control-button">スタート</button>
+                <div class="stop-buttons">
+                    <button id="stop-button-0" class="control-button stop-button">ストップ1</button>
+                    <button id="stop-button-1" class="control-button stop-button">ストップ2</button>
+                    <button id="stop-button-2" class="control-button stop-button">ストップ3</button>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <div class="info-item">
+                    <span class="info-label">設定: </span>
+                    <span id="current-setting">1</span>
+                    <button id="settings-button" class="small-button">設定変更</button>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">ゲーム数: </span>
+                    <span id="game-count">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">BIG: </span>
+                    <span id="big-count">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">REG: </span>
+                    <span id="reg-count">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="graph-container">
+            <h2>スランプグラフ</h2>
+            <canvas id="slump-graph"></canvas>
+        </div>
+        
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <h2>設定選択</h2>
+                <div class="setting-buttons">
+                    <button class="setting-button" data-setting="1">設定1</button>
+                    <button class="setting-button" data-setting="2">設定2</button>
+                    <button class="setting-button" data-setting="3">設定3</button>
+                    <button class="setting-button" data-setting="4">設定4</button>
+                    <button class="setting-button" data-setting="5">設定5</button>
+                    <button class="setting-button" data-setting="6">設定6</button>
+                </div>
+                <button id="reset-data-button">データリセット</button>
+                <button id="close-settings">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/reelData.js"></script>
+    <script src="js/reelImages.js"></script>
+    <script src="js/slotMachine.js"></script>
+    <script src="js/database.js"></script>
+    <script src="js/graph.js"></script>
+    <script src="js/main.js"></script>
+    
+    <script>
+        // DOMContentLoaded後にリール画像を読み込む
+        document.addEventListener('DOMContentLoaded', function() {
+            // リール画像の読み込み
+            loadReelImages();
+        });
+    </script>
+</body>
+</html> 
