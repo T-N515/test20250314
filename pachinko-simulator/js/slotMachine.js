@@ -14,7 +14,7 @@ class SlotMachine {
         // ゲーム状態
         this.credit = 1000; // 初期クレジット
         this.bet = 3; // 毎回3枚ベット
-        this.gameState = 'ready'; // ready, spinning, bonus
+        this.gameState = 'ready'; // ready, bet_placed, spinning, bonus
         this.bonusType = null; // BIG, REG
         this.bonusGamesRemaining = 0;
         this.currentSetting = 1; // 設定1-6
@@ -43,40 +43,13 @@ class SlotMachine {
     }
     
     /**
-     * ゲーム開始
+     * BETボタン処理
      */
-    startGame() {
-        // リールの状態をチェック
-        const anyReelSpinning = this.reels.some(reel => reel.isSpinning);
-        
-        // より緩和された条件でゲーム開始を許可
-        // ゲーム状態がspinningの場合のみ開始しない
-        if (this.gameState === 'spinning' && anyReelSpinning) {
-            console.log('リールが回転中のためゲームを開始できません');
-            return false;
-        }
-        
-        // リールが回転していないがゲーム状態がspinningの場合、ready状態に戻す
-        if (this.gameState === 'spinning' && !anyReelSpinning) {
-            console.warn('ゲーム状態が spinning ですが、リールは停止しています。状態を ready に修正します。');
-            this.gameState = 'ready';
-        }
-        
-        // 何らかの理由でゲーム状態が不正な場合はリセット
+    placeBet() {
+        // ゲーム状態がready以外の場合は処理しない
         if (this.gameState !== 'ready') {
-            console.warn('ゲーム状態が ready ではありません。強制的に ready に設定します。');
-            this.gameState = 'ready';
-        }
-        
-        // すべてのリールが停止していることを確認
-        if (anyReelSpinning) {
-            console.warn('リールが回転中です。停止処理を強制実行します。');
-            this.reels.forEach((reel, index) => {
-                if (reel.isSpinning) {
-                    cancelAnimationFrame(reel.animationId);
-                    reel.isSpinning = false;
-                }
-            });
+            console.log('ゲーム状態が ready ではないためBETできません: ' + this.gameState);
+            return false;
         }
         
         // クレジットチェック
@@ -91,6 +64,37 @@ class SlotMachine {
             this.coinDifference -= this.bet;
         }
         
+        // ゲーム状態を「リール始動待機状態」に変更
+        this.gameState = 'bet_placed';
+        console.log('ベットが完了しました。レバーを引いてください');
+        
+        return true;
+    }
+    
+    /**
+     * レバー操作処理
+     */
+    pullLever() {
+        // ゲーム状態がbet_placedでない場合は処理しない
+        if (this.gameState !== 'bet_placed') {
+            console.log('ベットされていないためレバーを引けません');
+            return false;
+        }
+        
+        // リールの状態をチェック
+        const anyReelSpinning = this.reels.some(reel => reel.isSpinning);
+        
+        // すべてのリールが停止していることを確認
+        if (anyReelSpinning) {
+            console.warn('リールが回転中です。停止処理を強制実行します。');
+            this.reels.forEach((reel, index) => {
+                if (reel.isSpinning) {
+                    cancelAnimationFrame(reel.animationId);
+                    reel.isSpinning = false;
+                }
+            });
+        }
+        
         // 役抽選
         this.determineWinningCombination();
         
@@ -101,7 +105,29 @@ class SlotMachine {
         this.startReels();
         
         this.gameState = 'spinning';
+        console.log('レバーが引かれました。リールが回転します');
         return true;
+    }
+    
+    /**
+     * ゲーム開始（従来の互換性のため残す、内部的にplaceBetとpullLeverを呼び出す）
+     */
+    startGame() {
+        // 既存のゲームが進行中なら中断
+        if (this.gameState === 'spinning') {
+            console.log('リールが回転中のためゲームを開始できません');
+            return false;
+        }
+        
+        // BETが未実行の場合は実行
+        if (this.gameState === 'ready') {
+            if (!this.placeBet()) {
+                return false;
+            }
+        }
+        
+        // レバーを引く
+        return this.pullLever();
     }
     
     /**

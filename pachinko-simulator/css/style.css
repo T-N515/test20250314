@@ -105,6 +105,12 @@ h1 {
     margin-bottom: 20px;
 }
 
+.betting-controls {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 5px;
+}
+
 .control-button {
     padding: 12px 25px;
     font-size: 18px;
@@ -113,6 +119,46 @@ h1 {
     cursor: pointer;
     transition: background-color 0.3s, transform 0.1s;
     font-weight: bold;
+}
+
+#bet-button {
+    background-color: #ffa500; /* オレンジ色 */
+    color: white;
+    width: 100px;
+}
+
+#bet-button:hover {
+    background-color: #ff8c00;
+}
+
+#bet-button:active {
+    transform: scale(0.95);
+}
+
+#bet-button:disabled {
+    background-color: #777;
+    cursor: not-allowed;
+    transform: none;
+}
+
+#lever-button {
+    background-color: #32cd32; /* ライム色 */
+    color: white;
+    width: 100px;
+}
+
+#lever-button:hover {
+    background-color: #228b22;
+}
+
+#lever-button:active {
+    transform: scale(0.95) translateY(5px); /* レバーを引くようなエフェクト */
+}
+
+#lever-button:disabled {
+    background-color: #777;
+    cursor: not-allowed;
+    transform: none;
 }
 
 #start-button {

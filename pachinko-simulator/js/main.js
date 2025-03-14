@@ -15,6 +15,8 @@ let gameCountDisplay;
 let bigCountDisplay;
 let regCountDisplay;
 let currentSettingDisplay;
+let betButton;
+let leverButton;
 let startButton;
 let stopButtons = [];
 let settingsButton;
@@ -44,6 +46,8 @@ async function init() {
     bigCountDisplay = document.getElementById('big-count');
     regCountDisplay = document.getElementById('reg-count');
     currentSettingDisplay = document.getElementById('current-setting');
+    betButton = document.getElementById('bet-button');
+    leverButton = document.getElementById('lever-button');
     startButton = document.getElementById('start-button');
     stopButtons = [
         document.getElementById('stop-button-0'),
@@ -141,7 +145,45 @@ async function loadData() {
  * イベントリスナーの設定
  */
 function setupEventListeners() {
-    // スタートボタン
+    // BETボタン
+    betButton.addEventListener('click', () => {
+        console.log('BETボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState);
+        
+        // ベット処理
+        const betPlaced = slotMachine.placeBet();
+        if (betPlaced) {
+            // UIの更新
+            updateUI();
+            // レバーボタンを有効化
+            leverButton.disabled = false;
+            // BETボタンを無効化
+            betButton.disabled = true;
+        } else {
+            console.error('ベットできませんでした。状態:', slotMachine.gameState, '残りクレジット:', slotMachine.credit);
+        }
+    });
+    
+    // レバーボタン
+    leverButton.addEventListener('click', () => {
+        console.log('レバーボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState);
+        
+        // レバー操作処理
+        const leverPulled = slotMachine.pullLever();
+        if (leverPulled) {
+            // UIの更新
+            updateUI();
+            // ストップボタンを有効化
+            disableStopButtons(false);
+            // レバーボタンを無効化
+            leverButton.disabled = true;
+            // スタートボタンを無効化（互換性のため）
+            startButton.disabled = true;
+        } else {
+            console.error('レバーを引けませんでした。状態:', slotMachine.gameState);
+        }
+    });
+    
+    // スタートボタン（互換性のため残す）
     startButton.addEventListener('click', () => {
         // ゲーム状態をコンソールに出力してデバッグ
         console.log('スタートボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState);
@@ -155,6 +197,9 @@ function setupEventListeners() {
             disableStopButtons(false);
             // スタートボタンを無効化
             startButton.disabled = true;
+            // BETボタンとレバーボタンを無効化
+            betButton.disabled = true;
+            leverButton.disabled = true;
         } else {
             console.error('ゲームを開始できませんでした。状態:', slotMachine.gameState, '残りクレジット:', slotMachine.credit);
             
@@ -202,7 +247,10 @@ function setupEventListeners() {
                 // データの保存
                 saveGameData();
                 
-                // スタートボタンを有効化（ゲーム状態に関わらず）
+                // BETボタンを有効化
+                betButton.disabled = false;
+                
+                // スタートボタン有効化（互換性のため）
                 startButton.disabled = false;
                 
                 // ゲーム状態の確認と修正
@@ -332,30 +380,69 @@ function setupEventListeners() {
  * UIの更新
  */
 function updateUI() {
-    // クレジット表示
+    // クレジット表示の更新
     creditDisplay.textContent = slotMachine.credit;
     
-    // ゲームカウント、ボーナスカウント
+    // ゲームカウント表示の更新
     gameCountDisplay.textContent = slotMachine.totalGames;
     bigCountDisplay.textContent = slotMachine.bigCount;
     regCountDisplay.textContent = slotMachine.regCount;
     
-    // 設定表示
+    // 設定表示の更新
     currentSettingDisplay.textContent = slotMachine.currentSetting;
     
-    // ボーナス中の表示
+    // ボタンの状態更新
+    updateButtonStates();
+    
+    // ボーナス時の演出
     if (slotMachine.bonusType) {
-        document.body.classList.add('bonus-mode');
-        document.body.classList.add(slotMachine.bonusType.toLowerCase());
+        document.body.classList.add('bonus-active');
+        document.body.classList.toggle('big-bonus', slotMachine.bonusType === 'BIG');
+        document.body.classList.toggle('reg-bonus', slotMachine.bonusType === 'REG');
     } else {
-        document.body.classList.remove('bonus-mode', 'big', 'reg');
+        document.body.classList.remove('bonus-active', 'big-bonus', 'reg-bonus');
     }
     
-    // AT中の表示
-    if (slotMachine.isAT) {
-        document.body.classList.add('at-mode');
-    } else {
-        document.body.classList.remove('at-mode');
+    // AT中の演出
+    document.body.classList.toggle('at-active', slotMachine.isAT);
+}
+
+/**
+ * ボタンの状態更新
+ */
+function updateButtonStates() {
+    // ゲーム状態に基づいてボタンの有効/無効を設定
+    switch (slotMachine.gameState) {
+        case 'ready':
+            // ready状態ではBETボタンのみ有効
+            betButton.disabled = false;
+            leverButton.disabled = true;
+            startButton.disabled = false; // 互換性のため
+            disableStopButtons(true);
+            break;
+            
+        case 'bet_placed':
+            // bet_placed状態ではレバーボタンのみ有効
+            betButton.disabled = true;
+            leverButton.disabled = false;
+            startButton.disabled = false; // 互換性のため
+            disableStopButtons(true);
+            break;
+            
+        case 'spinning':
+            // spinning状態ではストップボタンのみ有効
+            betButton.disabled = true;
+            leverButton.disabled = true;
+            startButton.disabled = true;
+            disableStopButtons(false);
+            break;
+            
+        default:
+            // その他の状態（ボーナスなど）
+            betButton.disabled = true;
+            leverButton.disabled = true;
+            startButton.disabled = true;
+            disableStopButtons(true);
     }
 }
 
