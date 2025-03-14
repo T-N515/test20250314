@@ -6,9 +6,9 @@ class SlotMachine {
     constructor() {
         // 基本パラメータ
         this.reels = [
-            { position: 0, isSpinning: false, stopPosition: null, animationId: null },
-            { position: 0, isSpinning: false, stopPosition: null, animationId: null },
-            { position: 0, isSpinning: false, stopPosition: null, animationId: null }
+            { position: 0, isSpinning: false, stopPosition: null, animationId: null, startTime: null, speed: 0 },
+            { position: 0, isSpinning: false, stopPosition: null, animationId: null, startTime: null, speed: 0 },
+            { position: 0, isSpinning: false, stopPosition: null, animationId: null, startTime: null, speed: 0 }
         ];
 
         // ゲーム状態
@@ -33,6 +33,9 @@ class SlotMachine {
         // リール回転の物理パラメータ
         this.spinSpeed = 50; // リールの回転スピード（大きくすると速くなる）
         this.reelStopDelay = 80; // ボタン押下からリール停止までの遅延（ミリ秒）
+        
+        // 目押し難易度（1.0 = 標準、0.5 = 簡単（引き込み強）、2.0 = 難しい（引き込み弱））
+        this.stopDifficulty = 1.0;
 
         // リール内部データ（ランダムな値で初期化）
         this.internalPositions = [
@@ -242,11 +245,28 @@ class SlotMachine {
      */
     startReels() {
         this.reels.forEach((reel, index) => {
+            // リール状態のリセット
             reel.isSpinning = true;
             reel.stopPosition = null;
-            // 内部位置をランダムに設定
-            this.internalPositions[index] = Math.floor(Math.random() * REEL_LAYOUTS[index].length);
-            this.spinReel(index);
+            reel.startTime = null;
+            reel.speed = this.spinSpeed;
+            
+            // 回転開始時に少しずつタイミングをずらす（より自然な動き用）
+            const startDelay = index * 100; // 各リール100msずつ遅延
+            
+            setTimeout(() => {
+                // 内部位置をランダムに設定（範囲内に確実に収める）
+                const reelLength = REEL_LAYOUTS[index].length;
+                this.internalPositions[index] = Math.floor(Math.random() * reelLength);
+                
+                // 位置を初期化
+                reel.position = this.internalPositions[index] * SYMBOL_HEIGHT;
+                
+                // 回転開始
+                this.spinReel(index);
+                
+                console.log(`リール${index}回転開始: 内部位置=${this.internalPositions[index]}, 表示位置=${reel.position}px`);
+            }, startDelay);
         });
     }
 
@@ -257,13 +277,39 @@ class SlotMachine {
         const reel = this.reels[reelIndex];
         if (!reel.isSpinning) return;
 
-        // リール位置の更新
-        reel.position += this.spinSpeed / 30; // フレームレートで調整
+        // リール情報を取得
+        const reelLayout = REEL_LAYOUTS[reelIndex];
+        const reelLength = reelLayout.length;
+        const reelHeight = reelLength * SYMBOL_HEIGHT;
 
-        // リールが一周したら位置をリセット
-        const reelHeight = REEL_LAYOUTS[reelIndex].length * SYMBOL_HEIGHT;
+        // 時間経過による速度変化（回転開始から時間が経つと少し遅くなる）
+        if (!reel.startTime) {
+            reel.startTime = Date.now();
+            reel.speed = this.spinSpeed;
+        } else {
+            const elapsedTime = Date.now() - reel.startTime;
+            
+            // 回転開始から2秒後くらいから徐々に速度低下（引き込み準備）
+            if (elapsedTime > 2000) {
+                // 最大20%減速（なめらかに減速）
+                const speedReduction = Math.min(0.2, (elapsedTime - 2000) / 5000);
+                reel.speed = this.spinSpeed * (1 - speedReduction);
+            }
+        }
+
+        // リール位置の更新
+        reel.position += reel.speed / 30; // フレームレートで調整
+
+        // リールが一周したら位置をリセット（無限ループのため）
         if (reel.position >= reelHeight) {
-            reel.position = 0;
+            // 完全にリセットせず、余りの位置を計算することで連続的な回転を維持
+            reel.position = reel.position % reelHeight;
+            
+            // 内部位置も更新
+            this.internalPositions[reelIndex] = Math.floor(reel.position / SYMBOL_HEIGHT) % reelLength;
+            
+            // デバッグログ
+            console.log(`リール${reelIndex}一周完了: 新しい位置=${reel.position.toFixed(2)}px, 内部位置=${this.internalPositions[reelIndex]}`);
         }
 
         // 次のアニメーションフレームのリクエスト
@@ -293,25 +339,44 @@ class SlotMachine {
             console.warn('ゲーム状態が spinning ではありませんが、リールを停止します');
         }
 
-        // 停止位置の決定
-        const stopPosition = this.determineStopPosition(reelIndex);
-        this.reels[reelIndex].stopPosition = stopPosition;
+        // 成立役に応じた停止位置を決定
+        const reelLength = REEL_LAYOUTS[reelIndex].length;
+        
+        // 停止ボタンのタイミングを記録（デバッグ用）
+        const rawPosition = this.reels[reelIndex].position;
+        const currentPosition = Math.floor(rawPosition / SYMBOL_HEIGHT) % reelLength;
+        console.log(`リール${reelIndex}停止ボタン押下: 生の位置=${rawPosition.toFixed(2)}px, コマ位置=${currentPosition}, symbolHeight=${SYMBOL_HEIGHT}`);
+        
+        // 成立役に基づいた停止位置の決定（タイミングは考慮しない）
+        const stopPosition = this.determineStopPosition(reelIndex, currentPosition);
+        
+        // 範囲チェック（念のため）
+        const validatedStopPosition = (stopPosition + reelLength) % reelLength;
+        this.reels[reelIndex].stopPosition = validatedStopPosition;
+        
+        // デバッグ情報
+        console.log(`リール${reelIndex}停止位置確定: 停止位置=${validatedStopPosition}, 図柄=${this.getSymbolName(REEL_LAYOUTS[reelIndex][validatedStopPosition])}`);
 
-        // 実際のリール停止は遅延を入れる
+        // リールの停止アニメーション開始
         setTimeout(() => {
             // アニメーションを停止
             cancelAnimationFrame(this.reels[reelIndex].animationId);
             this.reels[reelIndex].isSpinning = false;
 
-            // 位置を停止位置に設定（シンボルが中央に表示されるように調整）
-            this.internalPositions[reelIndex] = stopPosition;
-            // 中段に表示されるように位置を調整（1シンボル分上にずらす）
-            this.reels[reelIndex].position = stopPosition * SYMBOL_HEIGHT - SYMBOL_HEIGHT;
+            // 内部位置を確定した停止位置に設定
+            this.internalPositions[reelIndex] = validatedStopPosition;
+            
+            // 表示位置も正確に調整（シンボルの高さの倍数）
+            this.reels[reelIndex].position = validatedStopPosition * SYMBOL_HEIGHT;
+            
+            // デバッグ情報（実際の表示位置とシンボル名を含める）
+            console.log(`リール${reelIndex}を停止完了: 内部位置=${validatedStopPosition}, 表示位置=${this.reels[reelIndex].position}px, シンボル=${this.getSymbolName(REEL_LAYOUTS[reelIndex][validatedStopPosition])}`);
 
             // すべてのリールが停止したか確認
             if (this.allReelsStopped()) {
-                // 結果を評価するが、UIとの連携は行わない（UIはmain.jsで処理）
+                // 結果を評価する
                 this.evaluateResult();
+                
                 // ゲーム状態が変更されていない場合は明示的に更新
                 if (this.gameState !== 'ready') {
                     this.gameState = 'ready';
@@ -325,74 +390,186 @@ class SlotMachine {
 
     /**
      * 停止位置の決定
+     * @param {number} reelIndex - リールのインデックス
+     * @param {number} currentPosition - ボタンを押した時のリール位置
      */
-    determineStopPosition(reelIndex) {
+    determineStopPosition(reelIndex, currentPosition = 0) {
         // 成立役と停止リールに応じて制御位置を決定
-
-        // ハズレの場合
-        if (!this.currentWin) {
-            // ランダムな位置を返す
-            return Math.floor(Math.random() * REEL_LAYOUTS[reelIndex].length);
-        }
-
-        // ボーナス当選中はリーチ目になるようにスイカを狙わせる
-        if (this.bonusType && this.currentWin === WINNING_COMBINATIONS.REACH) {
-            if (reelIndex === 0) {
-                // 左リール上段にスイカが停止する位置を探す
-                for (let i = 0; i < REEL_LAYOUTS[0].length; i++) {
-                    if (REEL_LAYOUTS[0][i] === SYMBOLS.WATERMELON) {
-                        return i;
+        const reelLayout = REEL_LAYOUTS[reelIndex];
+        const reelLength = reelLayout.length;
+        
+        // 現在位置が確実にリール範囲内になるよう修正
+        currentPosition = ((currentPosition % reelLength) + reelLength) % reelLength;
+        
+        console.log(`リール${reelIndex}停止位置決定開始: 現在位置=${currentPosition}, 成立役=${this.currentWin ? this.getSymbolName(this.currentWin.symbols[reelIndex]) : 'なし'}`);
+        
+        // 成立役を最優先で実現する
+        // デフォルトの停止位置（見つからない場合のフォールバック）
+        let targetPosition = -1;
+        
+        // 成立役がある場合は、その役に応じた停止位置を決定
+        if (this.currentWin) {
+            // その他の役は中段に期待する図柄が揃うように制御
+            if (this.currentWin.symbols[reelIndex] !== null) {
+                const targetSymbol = this.currentWin.symbols[reelIndex];
+                
+                // チェリー確定役は左リール中段に
+                if (this.currentWin === WINNING_COMBINATIONS.CHERRY_GUARANTEE && reelIndex === 0) {
+                    targetPosition = this.findSymbolPositionForRow(reelIndex, SYMBOLS.CHERRY, 1);
+                    console.log(`チェリー確定役: リール${reelIndex}中段にチェリーを配置 位置=${targetPosition}`);
+                }
+                // 通常のチェリーは左リールの上か下に
+                else if (this.currentWin === WINNING_COMBINATIONS.CHERRY && reelIndex === 0) {
+                    // 上段または下段に停止するように
+                    const row = Math.random() < 0.5 ? 0 : 2;
+                    targetPosition = this.findSymbolPositionForRow(reelIndex, SYMBOLS.CHERRY, row);
+                    console.log(`チェリー役: リール${reelIndex}の${row === 0 ? '上段' : '下段'}にチェリーを配置 位置=${targetPosition}`);
+                }
+                // リーチ目役の特殊制御
+                else if (this.currentWin === WINNING_COMBINATIONS.REACH) {
+                    if (reelIndex === 0) {
+                        // 左リール上段にスイカ
+                        targetPosition = this.findSymbolPositionForRow(reelIndex, SYMBOLS.WATERMELON, 0);
+                    } else if (reelIndex === 1) {
+                        // 中リール中段にスイカ
+                        targetPosition = this.findSymbolPositionForRow(reelIndex, SYMBOLS.WATERMELON, 1);
+                    } else {
+                        // 右リール上段にスイカ
+                        targetPosition = this.findSymbolPositionForRow(reelIndex, SYMBOLS.WATERMELON, 0);
+                    }
+                    console.log(`リーチ目役: リール${reelIndex}の${reelIndex === 1 ? '中段' : '上段'}にスイカを配置 位置=${targetPosition}`);
+                }
+                // 通常の成立役
+                else {
+                    // 中段に期待する図柄が揃うように
+                    targetPosition = this.findSymbolPositionForRow(reelIndex, targetSymbol, 1);
+                    console.log(`通常役成立: リール${reelIndex}中段に${this.getSymbolName(targetSymbol)}を配置 位置=${targetPosition}`);
+                }
+                
+                // 対象のシンボルが見つからなかった場合
+                if (targetPosition === -1) {
+                    console.warn(`リール${reelIndex}で${this.getSymbolName(targetSymbol)}図柄の停止位置が見つかりませんでした`);
+                    
+                    // 代替策：対象のシンボルをリール上に直接探す
+                    for (let i = 0; i < reelLength; i++) {
+                        if (reelLayout[i] === targetSymbol) {
+                            targetPosition = i;
+                            console.log(`代替位置を見つけました: リール${reelIndex}の位置${i}に${this.getSymbolName(targetSymbol)}が存在します`);
+                            break;
+                        }
                     }
                 }
-            } else if (reelIndex === 1) {
-                // 中リール中段にスイカが停止する位置を探す
-                for (let i = 0; i < REEL_LAYOUTS[1].length; i++) {
-                    if (REEL_LAYOUTS[1][i] === SYMBOLS.WATERMELON) {
-                        return i;
+            }
+        }
+        // ハズレの場合でも揃ったマスにならないよう調整
+        else {
+            // 適切な停止位置を探す（各図柄がきれいに収まるように）
+            // 既に停止しているリールがある場合は、それらとかぶらないように配置
+            let suitablePosition = -1;
+            
+            // 既に停止しているリールがあれば、その中段シンボルを取得
+            const stoppedSymbols = [];
+            for (let i = 0; i < reelIndex; i++) {
+                if (!this.reels[i].isSpinning) {
+                    const midSymbol = this.getStoppedMiddleSymbol(i);
+                    if (midSymbol !== -1) {
+                        stoppedSymbols.push(midSymbol);
                     }
                 }
-            } else {
-                // 右リール上段にスイカが停止する位置を探す
-                for (let i = 0; i < REEL_LAYOUTS[2].length; i++) {
-                    if (REEL_LAYOUTS[2][i] === SYMBOLS.WATERMELON) {
-                        return i;
-                    }
+            }
+            
+            // ハズレらしい停止位置を探す（前のリールの中段シンボルと異なるものを中段に持ってくる）
+            for (let pos = 0; pos < reelLength; pos++) {
+                const symbolAtPos = reelLayout[pos];
+                
+                // 既に停止したリールの中段シンボルと異なるかチェック
+                if (stoppedSymbols.length === 0 || !stoppedSymbols.includes(symbolAtPos)) {
+                    suitablePosition = pos;
+                    break;
                 }
             }
+            
+            // 適切な位置が見つからない場合はランダムに選択
+            if (suitablePosition === -1) {
+                suitablePosition = Math.floor(Math.random() * reelLength);
+            }
+            
+            targetPosition = suitablePosition;
+            console.log(`リール${reelIndex}: ハズレ役でシンボル ${this.getSymbolName(reelLayout[targetPosition])} を中段に配置`);
         }
-
-        // チェリー確定役は左リール中段にチェリーが停止するように制御
-        if (this.currentWin === WINNING_COMBINATIONS.CHERRY_GUARANTEE && reelIndex === 0) {
-            for (let i = 0; i < REEL_LAYOUTS[0].length; i++) {
-                if (REEL_LAYOUTS[0][i] === SYMBOLS.CHERRY) {
-                    return i;
-                }
+        
+        // 目標位置が見つからなかった場合、適切な位置に停止
+        if (targetPosition === -1) {
+            console.warn(`リール${reelIndex}の目標位置が見つかりませんでした。適切な位置を探します。`);
+            // いずれかのシンボルが中段に来るように位置を調整
+            targetPosition = Math.floor(Math.random() * reelLength);
+        }
+        
+        console.log(`リール${reelIndex}最終停止位置決定: 位置=${targetPosition}, 図柄=${this.getSymbolName(reelLayout[targetPosition])}`);
+        return targetPosition;
+    }
+    
+    /**
+     * 既に停止しているリールの中段シンボルを取得
+     */
+    getStoppedMiddleSymbol(reelIndex) {
+        if (reelIndex >= 0 && reelIndex < 3 && !this.reels[reelIndex].isSpinning) {
+            const validatedPos = ((this.internalPositions[reelIndex] % REEL_LAYOUTS[reelIndex].length) + REEL_LAYOUTS[reelIndex].length) % REEL_LAYOUTS[reelIndex].length;
+            return REEL_LAYOUTS[reelIndex][validatedPos];
+        }
+        return -1;
+    }
+    
+    /**
+     * 特定の図柄が特定の段に表示される停止位置を探す
+     * @param {number} reelIndex - リールのインデックス
+     * @param {number} symbolType - 図柄の種類
+     * @param {number} row - 段位置（0=上段、1=中段、2=下段）
+     * @returns {number} 停止位置（見つからない場合は-1）
+     */
+    findSymbolPositionForRow(reelIndex, symbolType, row) {
+        const reelLayout = REEL_LAYOUTS[reelIndex];
+        const reelLength = reelLayout.length;
+        
+        // 各位置をチェック
+        for (let i = 0; i < reelLength; i++) {
+            // 指定された段に指定された図柄が来る位置を計算
+            let checkPos;
+            if (row === 0) { // 上段
+                checkPos = (i + 1) % reelLength; // 中段位置から1コマ上
+            } else if (row === 1) { // 中段
+                checkPos = i; // 中段位置そのまま
+            } else { // 下段
+                checkPos = (i + reelLength - 1) % reelLength; // 中段位置から1コマ下
+            }
+            
+            // 目的の図柄が見つかった場合
+            if (reelLayout[checkPos] === symbolType) {
+                // 確認用ログ
+                console.log(`リール${reelIndex}の${row}段(${row === 0 ? '上段' : row === 1 ? '中段' : '下段'})に${symbolType}(${this.getSymbolName(symbolType)})が来る停止位置: ${i}`);
+                
+                // この位置で停止すると指定の図柄が指定の段に表示される
+                return i;
             }
         }
+        
+        console.warn(`リール${reelIndex}の${row}段に${symbolType}(${this.getSymbolName(symbolType)})が来る位置が見つかりませんでした`);
+        return -1; // 見つからなかった
+    }
 
-        // 通常のチェリーは左リールのみ制御
-        if (this.currentWin === WINNING_COMBINATIONS.CHERRY && reelIndex === 0) {
-            for (let i = 0; i < REEL_LAYOUTS[0].length; i++) {
-                if (REEL_LAYOUTS[0][i] === SYMBOLS.CHERRY) {
-                    return i;
-                }
-            }
+    /**
+     * シンボルIDから名前を取得（デバッグ用）
+     */
+    getSymbolName(symbolId) {
+        switch (symbolId) {
+            case SYMBOLS.BELL: return 'ベル';
+            case SYMBOLS.REPLAY: return 'リプレイ';
+            case SYMBOLS.WATERMELON: return 'スイカ';
+            case SYMBOLS.CHERRY: return 'チェリー';
+            case SYMBOLS.BAR: return 'BAR';
+            case SYMBOLS.SEVEN: return '7';
+            default: return '不明';
         }
-
-        // その他の役は期待する図柄が揃うように制御
-        if (this.currentWin.symbols[reelIndex] !== null) {
-            const targetSymbol = this.currentWin.symbols[reelIndex];
-
-            // 目標のシンボルを探す
-            for (let i = 0; i < REEL_LAYOUTS[reelIndex].length; i++) {
-                if (REEL_LAYOUTS[reelIndex][i] === targetSymbol) {
-                    return i;
-                }
-            }
-        }
-
-        // それ以外はランダム
-        return Math.floor(Math.random() * REEL_LAYOUTS[reelIndex].length);
     }
 
     /**
@@ -456,19 +633,55 @@ class SlotMachine {
      */
     getStoppedSymbols() {
         const symbols = [];
+        const debug = [];
 
         for (let i = 0; i < 3; i++) {
+            // 内部位置を確実に取得して範囲内に収める
             const reelPos = this.internalPositions[i];
             const reelLayout = REEL_LAYOUTS[i];
+            const reelLength = reelLayout.length;
 
-            // 3つの位置（上中下）のシンボルを取得
-            symbols.push([
-                reelLayout[(reelPos - 1 + reelLayout.length) % reelLayout.length], // 上段
-                reelLayout[reelPos], // 中段
-                reelLayout[(reelPos + 1) % reelLayout.length] // 下段
-            ]);
+            // 確実に範囲内に収める（念のため）
+            const validatedReelPos = ((reelPos % reelLength) + reelLength) % reelLength;
+            
+            // 表示位置と内部位置の確認
+            console.log(`リール${i}の表示位置確認: 内部位置=${reelPos}, 検証済み位置=${validatedReelPos}, 生の位置=${this.reels[i].position}px`);
+            
+            // 上中下段それぞれの位置を計算
+            const upPos = (validatedReelPos - 1 + reelLength) % reelLength;  // 上段（中段から1コマ上）
+            const midPos = validatedReelPos;                                // 中段
+            const downPos = (validatedReelPos + 1) % reelLength;             // 下段（中段から1コマ下）
+
+            // 対応する図柄を取得
+            const upSymbol = reelLayout[upPos];
+            const midSymbol = reelLayout[midPos];
+            const downSymbol = reelLayout[downPos];
+            
+            // 各段の図柄を配列に格納
+            symbols.push([upSymbol, midSymbol, downSymbol]);
+
+            // デバッグ情報
+            debug.push({
+                reel: i,
+                rawPosition: this.reels[i].position,
+                internalPosition: reelPos,
+                validatedPosition: validatedReelPos,
+                positions: { up: upPos, mid: midPos, down: downPos },
+                symbols: { 
+                    up: this.getSymbolName(upSymbol), 
+                    mid: this.getSymbolName(midSymbol), 
+                    down: this.getSymbolName(downSymbol) 
+                }
+            });
         }
 
+        console.log('停止図柄詳細:', debug);
+        console.log('停止図柄:', symbols.map(reel => reel.map(s => this.getSymbolName(s))));
+        
+        // 成立役判定のための中段の図柄も表示（見やすく）
+        const middleRow = [symbols[0][1], symbols[1][1], symbols[2][1]];
+        console.log(`中段図柄: ${this.getSymbolName(middleRow[0])} - ${this.getSymbolName(middleRow[1])} - ${this.getSymbolName(middleRow[2])}`);
+        
         return symbols;
     }
 
@@ -477,56 +690,188 @@ class SlotMachine {
      */
     evaluateWin(stoppedSymbols) {
         let payout = 0;
+        let winType = 'なし';
+
+        // 中段で揃った図柄（3リール分）
+        const middleRow = [stoppedSymbols[0][1], stoppedSymbols[1][1], stoppedSymbols[2][1]];
+        
+        // 斜め左上から右下の図柄
+        const diagonalDown = [stoppedSymbols[0][0], stoppedSymbols[1][1], stoppedSymbols[2][2]];
+        
+        // 斜め左下から右上の図柄
+        const diagonalUp = [stoppedSymbols[0][2], stoppedSymbols[1][1], stoppedSymbols[2][0]];
+        
+        // 中段の図柄名（デバッグ用）
+        const middleRowNames = middleRow.map(symbol => this.getSymbolName(symbol));
+        const diagonalDownNames = diagonalDown.map(symbol => this.getSymbolName(symbol));
+        const diagonalUpNames = diagonalUp.map(symbol => this.getSymbolName(symbol));
+        
+        console.log(`役判定: 中段=[${middleRowNames.join(', ')}], 斜め下=[${diagonalDownNames.join(', ')}], 斜め上=[${diagonalUpNames.join(', ')}]`);
 
         // チェリー確定役（左リール中段チェリー）
         if (stoppedSymbols[0][1] === SYMBOLS.CHERRY) {
             payout = WINNING_COMBINATIONS.CHERRY_GUARANTEE.payout;
+            winType = 'チェリー確定役';
             console.log('チェリー確定役成立！');
         }
         // リーチ目役
         else if (stoppedSymbols[0][0] === SYMBOLS.WATERMELON &&
                  stoppedSymbols[1][1] === SYMBOLS.WATERMELON &&
                  stoppedSymbols[2][0] === SYMBOLS.WATERMELON) {
+            winType = 'リーチ目役';
             console.log('リーチ目役成立！');
         }
-        // 通常のチェリー（左リールのみ）
+        // 通常のチェリー（左リールの上か下にチェリー）
         else if (stoppedSymbols[0][0] === SYMBOLS.CHERRY ||
                  stoppedSymbols[0][2] === SYMBOLS.CHERRY) {
             payout = WINNING_COMBINATIONS.CHERRY.payout;
+            winType = 'チェリー';
             console.log('チェリー成立！');
         }
         // その他の役
         else {
-            // 中段で判定
-            const middleRow = [stoppedSymbols[0][1], stoppedSymbols[1][1], stoppedSymbols[2][1]];
-
             // リプレイ
+            // 中段に3つリプレイが揃う
             if (middleRow.every(symbol => symbol === SYMBOLS.REPLAY)) {
-                console.log('リプレイ成立！');
                 this.currentWin = WINNING_COMBINATIONS.REPLAY;
+                winType = 'リプレイ';
+                console.log('リプレイ成立！');
+            }
+            // 斜め下がりにリプレイが揃う
+            else if (diagonalDown.every(symbol => symbol === SYMBOLS.REPLAY)) {
+                this.currentWin = WINNING_COMBINATIONS.REPLAY;
+                winType = 'リプレイ（斜め下がり）';
+                console.log('リプレイ（斜め下がり）成立！');
+            }
+            // 斜め上がりにリプレイが揃う
+            else if (diagonalUp.every(symbol => symbol === SYMBOLS.REPLAY)) {
+                this.currentWin = WINNING_COMBINATIONS.REPLAY;
+                winType = 'リプレイ（斜め上がり）';
+                console.log('リプレイ（斜め上がり）成立！');
             }
 
             // ベル
+            // 中段にベルが揃う
             if (middleRow.every(symbol => symbol === SYMBOLS.BELL)) {
                 payout = this.bonusType ? WINNING_COMBINATIONS.BELL.bonusPayout : WINNING_COMBINATIONS.BELL.payout;
-                console.log('ベル成立！ 払出' + payout + '枚');
+                winType = 'ベル';
+                console.log(`ベル成立！ 払出${payout}枚`);
+            }
+            // 斜め下がりにベルが揃う
+            else if (diagonalDown.every(symbol => symbol === SYMBOLS.BELL)) {
+                payout = this.bonusType ? WINNING_COMBINATIONS.BELL.bonusPayout : WINNING_COMBINATIONS.BELL.payout;
+                winType = 'ベル（斜め下がり）';
+                console.log(`ベル（斜め下がり）成立！ 払出${payout}枚`);
+            }
+            // 斜め上がりにベルが揃う
+            else if (diagonalUp.every(symbol => symbol === SYMBOLS.BELL)) {
+                payout = this.bonusType ? WINNING_COMBINATIONS.BELL.bonusPayout : WINNING_COMBINATIONS.BELL.payout;
+                winType = 'ベル（斜め上がり）';
+                console.log(`ベル（斜め上がり）成立！ 払出${payout}枚`);
             }
 
             // スイカ
+            // 中段にスイカが揃う
             if (middleRow.every(symbol => symbol === SYMBOLS.WATERMELON)) {
                 payout = WINNING_COMBINATIONS.WATERMELON.payout;
-                console.log('スイカ成立！ 払出' + payout + '枚');
+                winType = 'スイカ';
+                console.log(`スイカ成立！ 払出${payout}枚`);
+            }
+            // 斜め下がりにスイカが揃う
+            else if (diagonalDown.every(symbol => symbol === SYMBOLS.WATERMELON)) {
+                payout = WINNING_COMBINATIONS.WATERMELON.payout;
+                winType = 'スイカ（斜め下がり）';
+                console.log(`スイカ（斜め下がり）成立！ 払出${payout}枚`);
+            }
+            // 斜め上がりにスイカが揃う
+            else if (diagonalUp.every(symbol => symbol === SYMBOLS.WATERMELON)) {
+                payout = WINNING_COMBINATIONS.WATERMELON.payout;
+                winType = 'スイカ（斜め上がり）';
+                console.log(`スイカ（斜め上がり）成立！ 払出${payout}枚`);
+            }
+            
+            // 7揃い - ボーナス確定
+            // 中段に7が揃う
+            if (middleRow.every(symbol => symbol === SYMBOLS.SEVEN)) {
+                // BIGボーナス確定
+                if (!this.bonusType) {
+                    this.bonusType = 'BIG';
+                    this.bonusGamesRemaining = 70;
+                    this.bigCount++;
+                    winType = '7揃い（BIG確定）';
+                    console.log('7揃い！ BIGボーナス確定！');
+                }
+            }
+            // 斜め下がりに7が揃う
+            else if (diagonalDown.every(symbol => symbol === SYMBOLS.SEVEN)) {
+                // BIGボーナス確定
+                if (!this.bonusType) {
+                    this.bonusType = 'BIG';
+                    this.bonusGamesRemaining = 70;
+                    this.bigCount++;
+                    winType = '7揃い（斜め下がり）（BIG確定）';
+                    console.log('7揃い（斜め下がり）！ BIGボーナス確定！');
+                }
+            }
+            // 斜め上がりに7が揃う
+            else if (diagonalUp.every(symbol => symbol === SYMBOLS.SEVEN)) {
+                // BIGボーナス確定
+                if (!this.bonusType) {
+                    this.bonusType = 'BIG';
+                    this.bonusGamesRemaining = 70;
+                    this.bigCount++;
+                    winType = '7揃い（斜め上がり）（BIG確定）';
+                    console.log('7揃い（斜め上がり）！ BIGボーナス確定！');
+                }
+            }
+            
+            // BAR揃い - REGボーナス確定
+            // 中段にBARが揃う
+            if (middleRow.every(symbol => symbol === SYMBOLS.BAR)) {
+                // REGボーナス確定
+                if (!this.bonusType) {
+                    this.bonusType = 'REG';
+                    this.bonusGamesRemaining = 20;
+                    this.regCount++;
+                    winType = 'BAR揃い（REG確定）';
+                    console.log('BAR揃い！ REGボーナス確定！');
+                }
+            }
+            // 斜め下がりにBARが揃う
+            else if (diagonalDown.every(symbol => symbol === SYMBOLS.BAR)) {
+                // REGボーナス確定
+                if (!this.bonusType) {
+                    this.bonusType = 'REG';
+                    this.bonusGamesRemaining = 20;
+                    this.regCount++;
+                    winType = 'BAR揃い（斜め下がり）（REG確定）';
+                    console.log('BAR揃い（斜め下がり）！ REGボーナス確定！');
+                }
+            }
+            // 斜め上がりにBARが揃う
+            else if (diagonalUp.every(symbol => symbol === SYMBOLS.BAR)) {
+                // REGボーナス確定
+                if (!this.bonusType) {
+                    this.bonusType = 'REG';
+                    this.bonusGamesRemaining = 20;
+                    this.regCount++;
+                    winType = 'BAR揃い（斜め上がり）（REG確定）';
+                    console.log('BAR揃い（斜め上がり）！ REGボーナス確定！');
+                }
             }
         }
 
         // 払い出し処理
         this.credit += payout;
         this.coinDifference += payout;
+        
+        console.log(`役判定結果: ${winType}, 払出: ${payout}枚`);
 
         // ボーナス中にBAR揃い判定（低確率でAT突入）
-        if (this.bonusType && stoppedSymbols[0][1] === SYMBOLS.BAR &&
-            stoppedSymbols[1][1] === SYMBOLS.BAR &&
-            stoppedSymbols[2][1] === SYMBOLS.BAR) {
+        if (this.bonusType && 
+            ((middleRow.every(symbol => symbol === SYMBOLS.BAR)) || 
+             (diagonalDown.every(symbol => symbol === SYMBOLS.BAR)) || 
+             (diagonalUp.every(symbol => symbol === SYMBOLS.BAR)))) {
 
             if (Math.random() < 0.1) {  // 10%の確率でAT突入
                 this.isAT = true;
@@ -575,31 +920,26 @@ class SlotMachine {
      * エラー発生時やゲームが応答しなくなったときに呼び出す
      */
     forceReset() {
-        // リールの回転を強制停止
-        this.reels.forEach((reel, index) => {
-            if (reel.isSpinning) {
-                cancelAnimationFrame(reel.animationId);
-                reel.isSpinning = false;
-                reel.stopPosition = null;
-            }
+        console.log('スロットマシンを強制リセットします');
+
+        // リールの状態をリセット
+        this.reels.forEach(reel => {
+            reel.isSpinning = false;
+            reel.position = 0;
         });
+
+        // 内部位置を更新
+        this.internalPositions = this.reels.map(() => 0);
 
         // ゲーム状態をリセット
         this.gameState = 'ready';
 
-        // リール位置をリセット
-        this.reels.forEach((reel, index) => {
-            reel.position = 0;
-        });
+        // 各種フラグをリセット
+        this.currentBet = 0;
+        this.currentWin = null;
+        this.currentBonus = null;
 
-        // 内部位置もリセット
-        this.internalPositions = [
-            Math.floor(Math.random() * REEL_LAYOUTS[0].length),
-            Math.floor(Math.random() * REEL_LAYOUTS[1].length),
-            Math.floor(Math.random() * REEL_LAYOUTS[2].length)
-        ];
-
-        console.log('ゲーム状態を強制的にリセットしました');
+        console.log('強制リセット完了: 新しい状態', this.gameState);
         return true;
     }
 }

@@ -47,7 +47,6 @@ h1 {
 
 .reel {
     width: 100px;
-    height: 150px; /* 3シンボル分の高さに修正 (50px × 3) */
     background-color: #333;
     border: 3px solid #555;
     border-radius: 5px;
@@ -55,17 +54,20 @@ h1 {
     position: relative;
 }
 
+.reel-viewport {
+    height: 150px; /* 3シンボル分の高さに固定 (50px × 3) */
+    overflow: hidden;
+    position: relative;
+    background-color: #111;
+}
+
 .reel-inner {
     position: absolute;
     width: 100%;
-    height: 1200px; /* 各シンボルの高さ(50px) × 全シンボル数(20こま+4こま) */
-    background-image: url('../images/reel-symbols.png');
-    background-size: 100% auto;
-    background-repeat: repeat-y;
-    transition: transform 0.1s linear;
+    transition: transform 0.05s linear;
 }
 
-/* 仮のリール画像が見つからない場合に表示するプレースホルダーシンボル */
+/* シンボル */
 .symbol {
     display: flex;
     justify-content: center;
@@ -74,8 +76,67 @@ h1 {
     height: 50px;
     background-color: #444;
     color: white;
-    font-size: 24px;
-    border-bottom: 1px solid #555;
+    font-size: 20px;
+    font-weight: bold;
+    border: 2px solid #555;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+/* マーカー（3×3のグリッド）*/
+.reel-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-rows: repeat(3, 1fr);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.grid-cell {
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    box-sizing: border-box;
+    height: 50px; /* 各セルの高さを明示的に設定 */
+}
+
+.grid-cell.center {
+    border: 2px solid red;
+}
+
+/* シンボルタイプごとのスタイル */
+.symbol-seven {
+    background-color: #ff5555;
+    color: white;
+    font-weight: bold;
+}
+
+.symbol-bar {
+    background-color: #ffcc00;
+    color: #333;
+    font-weight: bold;
+}
+
+.symbol-bell {
+    background-color: #ffff00;
+    color: #333;
+}
+
+.symbol-cherry {
+    background-color: #ff3333;
+    color: white;
+}
+
+.symbol-watermelon {
+    background-color: #33cc33;
+    color: white;
+}
+
+.symbol-replay {
+    background-color: #ffffff;
+    color: #333;
 }
 
 /* クレジット表示 */
@@ -111,99 +172,132 @@ h1 {
     margin-bottom: 5px;
 }
 
+/* ボタンの共通スタイル */
 .control-button {
-    padding: 12px 25px;
+    display: inline-block;
+    padding: 12px 20px;
+    margin: 8px;
+    border: none;
+    border-radius: 5px;
     font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    user-select: none;
+    z-index: 10;
+    position: relative;
+}
+
+/* 無効状態のスタイル */
+.control-button:disabled,
+.control-button.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+    background-color: #777 !important;
+    color: #ddd !important;
+}
+
+/* BETボタン */
+#bet-button {
+    background-color: #4CAF50;
+    color: white;
+    width: 120px;
+    height: 50px;
+}
+
+#bet-button:hover:not(:disabled) {
+    background-color: #45a049;
+    transform: translateY(-2px);
+}
+
+#bet-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* レバーボタン */
+#lever-button {
+    background-color: #f44336;
+    color: white;
+    width: 120px;
+    height: 50px;
+}
+
+#lever-button:hover:not(:disabled) {
+    background-color: #e53935;
+    transform: translateY(-2px);
+}
+
+#lever-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* ストップボタン */
+.stop-button {
+    background-color: #2196F3;
+    color: white;
+    width: 100px;
+    height: 45px;
+}
+
+.stop-button:hover:not(:disabled) {
+    background-color: #0b7dda;
+    transform: translateY(-2px);
+}
+
+.stop-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* 設定ボタン */
+#settings-button {
+    background-color: #9c27b0;
+    color: white;
+    font-size: 14px;
+    padding: 5px 10px;
+}
+
+#settings-button:hover {
+    background-color: #7B1FA2;
+}
+
+/* 設定選択ボタン */
+.setting-button {
+    background-color: #607D8B;
+    color: white;
+    padding: 10px 15px;
+    margin: 5px;
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    transition: background-color 0.3s, transform 0.1s;
+    transition: background-color 0.3s;
     font-weight: bold;
 }
 
-#bet-button {
-    background-color: #ffa500; /* オレンジ色 */
+.setting-button:hover {
+    background-color: #455A64;
+}
+
+.setting-button.active {
+    background-color: #FF9800;
+}
+
+/* データリセットボタン */
+#reset-data-button {
+    background-color: #F44336;
     color: white;
-    width: 100px;
+    padding: 10px 15px;
+    margin: 10px 0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
 }
 
-#bet-button:hover {
-    background-color: #ff8c00;
-}
-
-#bet-button:active {
-    transform: scale(0.95);
-}
-
-#bet-button:disabled {
-    background-color: #777;
-    cursor: not-allowed;
-    transform: none;
-}
-
-#lever-button {
-    background-color: #32cd32; /* ライム色 */
-    color: white;
-    width: 100px;
-}
-
-#lever-button:hover {
-    background-color: #228b22;
-}
-
-#lever-button:active {
-    transform: scale(0.95) translateY(5px); /* レバーを引くようなエフェクト */
-}
-
-#lever-button:disabled {
-    background-color: #777;
-    cursor: not-allowed;
-    transform: none;
-}
-
-#start-button {
-    background-color: #ff3e3e;
-    color: white;
-    width: 150px;
-}
-
-#start-button:hover {
-    background-color: #e62222;
-}
-
-#start-button:active {
-    transform: scale(0.95);
-}
-
-#start-button:disabled {
-    background-color: #777;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.stop-buttons {
-    display: flex;
-    gap: 15px;
-}
-
-.stop-button {
-    background-color: #3e8eff;
-    color: white;
-    width: 100px;
-}
-
-.stop-button:hover {
-    background-color: #2273e6;
-}
-
-.stop-button:active {
-    transform: scale(0.95);
-}
-
-.stop-button:disabled {
-    background-color: #777;
-    cursor: not-allowed;
-    transform: none;
+#reset-data-button:hover {
+    background-color: #D32F2F;
 }
 
 /* 情報パネル */
@@ -303,57 +397,6 @@ h1 {
     margin-bottom: 25px;
 }
 
-.setting-button {
-    padding: 15px;
-    font-size: 16px;
-    background-color: #555;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-.setting-button:hover {
-    background-color: #777;
-}
-
-.setting-button.active {
-    background-color: #3e8eff;
-}
-
-#reset-data-button {
-    display: block;
-    margin: 0 auto 15px;
-    padding: 10px 20px;
-    background-color: #ff3e3e;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-#reset-data-button:hover {
-    background-color: #e62222;
-}
-
-#close-settings {
-    display: block;
-    margin: 0 auto;
-    padding: 10px 20px;
-    background-color: #777;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-#close-settings:hover {
-    background-color: #999;
-}
-
 /* レスポンシブデザイン */
 @media (max-width: 768px) {
     .reels-container {
@@ -430,4 +473,43 @@ h1 {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
+}
+
+/* 目押しマーカー（中段位置表示）*/
+.middle-marker {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50px; /* 2段目（中段）の位置 */
+    height: 50px;
+    border: 2px solid red;
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* ストップボタンコンテナ */
+.stop-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+/* 閉じるボタン */
+#close-settings {
+    display: block;
+    margin: 0 auto;
+    padding: 10px 20px;
+    background-color: #777;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#close-settings:hover {
+    background-color: #999;
 } 
