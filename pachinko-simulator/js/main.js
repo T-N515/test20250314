@@ -17,7 +17,6 @@ let regCountDisplay;
 let currentSettingDisplay;
 let betButton;
 let leverButton;
-let startButton;
 let stopButtons = [];
 let settingsButton;
 let settingsModal;
@@ -48,7 +47,6 @@ async function init() {
     currentSettingDisplay = document.getElementById('current-setting');
     betButton = document.getElementById('bet-button');
     leverButton = document.getElementById('lever-button');
-    startButton = document.getElementById('start-button');
     stopButtons = [
         document.getElementById('stop-button-0'),
         document.getElementById('stop-button-1'),
@@ -176,72 +174,8 @@ function setupEventListeners() {
             disableStopButtons(false);
             // レバーボタンを無効化
             leverButton.disabled = true;
-            // スタートボタンを無効化（互換性のため）
-            startButton.disabled = true;
         } else {
             console.error('レバーを引けませんでした。状態:', slotMachine.gameState);
-        }
-    });
-
-    // スタートボタン（互換性のため残す）
-    startButton.addEventListener('click', () => {
-        // ゲーム状態をコンソールに出力してデバッグ
-        console.log('スタートボタンがクリックされました。現在のゲーム状態:', slotMachine.gameState, '無効化状態:', startButton.disabled);
-
-        // まず強制的に有効化（何らかの問題でdisabled属性が残っている場合に対応）
-        if (startButton.disabled) {
-            console.warn('スタートボタンが無効化されています。有効化します。');
-            startButton.disabled = false;
-
-            // すべてのリールが停止しているか確認
-            if (!slotMachine.allReelsStopped()) {
-                // リールが回転中の場合は強制停止
-                slotMachine.reels.forEach((reel, index) => {
-                    if (reel.isSpinning) {
-                        cancelAnimationFrame(reel.animationId);
-                        reel.isSpinning = false;
-                    }
-                });
-
-                // ゲーム状態をリセット
-                slotMachine.gameState = 'ready';
-            }
-        }
-
-        // ゲームの開始を試みる
-        const started = slotMachine.startGame();
-        if (started) {
-            // UIの更新
-            updateUI();
-            // ストップボタンを有効化
-            disableStopButtons(false);
-            // スタートボタンを無効化
-            startButton.disabled = true;
-            // BETボタンとレバーボタンを無効化
-            betButton.disabled = true;
-            leverButton.disabled = true;
-            console.log('スタートボタンを無効化しました。disabled =', startButton.disabled);
-        } else {
-            console.error('ゲームを開始できませんでした。状態:', slotMachine.gameState, '残りクレジット:', slotMachine.credit);
-
-            // エラーの場合、ゲーム状態をリセットして再試行できるようにする
-            if (slotMachine.credit >= slotMachine.bet || slotMachine.currentWin?.isReplay) {
-                // ゲーム状態を強制的にリセット
-                slotMachine.gameState = 'ready';
-                // すべてのリールが停止しているか確認
-                const allStopped = slotMachine.allReelsStopped();
-                if (!allStopped) {
-                    // リールが回転中の場合、強制的に停止
-                    slotMachine.reels.forEach((reel, index) => {
-                        if (reel.isSpinning) {
-                            cancelAnimationFrame(reel.animationId);
-                            reel.isSpinning = false;
-                        }
-                    });
-                }
-            }
-            // UIの更新
-            updateUI();
         }
     });
 
@@ -272,7 +206,7 @@ function setupEventListeners() {
                 slotMachine.gameState = 'ready';
 
                 // すべてのボタンの状態を明示的にリセット
-                enableStartButton();
+                enableBetButton();
 
                 // UIの更新
                 updateUI();
@@ -339,10 +273,15 @@ function setupEventListeners() {
 
     // キーボードショートカット
     document.addEventListener('keydown', (event) => {
-        // スペースでスタート
-        if (event.code === 'Space' && !startButton.disabled) {
+        // スペースでBETまたはレバー操作
+        if (event.code === 'Space') {
             event.preventDefault();
-            startButton.click();
+            // ゲーム状態に応じてボタン操作
+            if (slotMachine.gameState === 'ready' && !betButton.disabled) {
+                betButton.click();
+            } else if (slotMachine.gameState === 'bet_placed' && !leverButton.disabled) {
+                leverButton.click();
+            }
         }
 
         // 1,2,3キーでストップボタン
@@ -366,7 +305,6 @@ function setupEventListeners() {
 
             // ボタン状態の更新
             disableStopButtons(true);
-            startButton.disabled = false;
 
             // UIの更新
             updateUI();
@@ -432,7 +370,6 @@ function updateButtonStates() {
             // ready状態ではBETボタンのみ有効
             setButtonState(betButton, false);
             setButtonState(leverButton, true);
-            setButtonState(startButton, false); // 互換性のため
             disableStopButtons(true);
             break;
 
@@ -440,7 +377,6 @@ function updateButtonStates() {
             // bet_placed状態ではレバーボタンのみ有効
             setButtonState(betButton, true);
             setButtonState(leverButton, false);
-            setButtonState(startButton, false); // 互換性のため
             disableStopButtons(true);
             break;
 
@@ -448,7 +384,6 @@ function updateButtonStates() {
             // spinning状態ではストップボタンのみ有効
             setButtonState(betButton, true);
             setButtonState(leverButton, true);
-            setButtonState(startButton, true);
             disableStopButtons(false);
             break;
 
@@ -456,7 +391,6 @@ function updateButtonStates() {
             // その他の状態（ボーナスなど）
             setButtonState(betButton, true);
             setButtonState(leverButton, true);
-            setButtonState(startButton, true);
             disableStopButtons(true);
     }
 }
@@ -636,12 +570,16 @@ function checkGameState() {
         resetGameState();
     }
 
-    // スタートボタンの状態チェック
+    // ボタンの状態チェック
     if (allStopped && (slotMachine.gameState === 'ready' || slotMachine.gameState === 'bet_placed')) {
-        // スタートボタンが無効化されている場合は強制的に有効化
-        if (startButton.disabled || betButton.disabled) {
-            console.warn('不整合を検出: ゲーム準備完了状態なのにボタンが無効化されています。ボタン状態をリセットします。');
-            enableStartButton();
+        // ボタンが無効化されている場合は強制的に有効化
+        if (betButton.disabled && slotMachine.gameState === 'ready') {
+            console.warn('不整合を検出: ゲーム準備完了状態なのにBETボタンが無効化されています。ボタン状態をリセットします。');
+            enableBetButton();
+            updateUI(); // UIを更新して確実に変更を反映
+        } else if (leverButton.disabled && slotMachine.gameState === 'bet_placed') {
+            console.warn('不整合を検出: ベット済み状態なのにレバーボタンが無効化されています。ボタン状態をリセットします。');
+            setButtonState(leverButton, false);
             updateUI(); // UIを更新して確実に変更を反映
         }
     }
@@ -679,7 +617,7 @@ function resetGameState() {
     slotMachine.gameState = 'ready';
 
     // ボタン状態をリセット
-    enableStartButton();
+    enableBetButton();
     disableStopButtons(true);
 
     // UIを更新
@@ -689,27 +627,21 @@ function resetGameState() {
 }
 
 /**
- * スタートボタンを強制的に有効化する
+ * BETボタンの有効化
  */
-function enableStartButton() {
-    console.log('スタートボタンを有効化します。前の状態:', startButton.disabled);
+function enableBetButton() {
+    console.log('BETボタンを有効化します。前の状態:', betButton.disabled);
 
-    // DOM操作での有効化
-    startButton.disabled = false;
-    startButton.removeAttribute('disabled');
-
-    // BETボタンも有効化（新しいゲームフロー用）
+    // BETボタンの有効化
     betButton.disabled = false;
     betButton.removeAttribute('disabled');
 
     // 連続して複数回有効化を試みる（ブラウザのレンダリングサイクルの問題対策）
     for (let i = 0; i < 3; i++) {
         setTimeout(() => {
-            startButton.disabled = false;
-            startButton.removeAttribute('disabled');
             betButton.disabled = false;
             betButton.removeAttribute('disabled');
-            console.log(`[${i}] スタートボタンを強制的に有効化しました。現在の状態:`, startButton.disabled);
+            console.log(`[${i}] BETボタンを強制的に有効化しました。現在の状態:`, betButton.disabled);
         }, i * 50); // 50ms間隔で3回実行
     }
 }

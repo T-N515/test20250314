@@ -116,27 +116,6 @@ class SlotMachine {
     }
 
     /**
-     * ゲーム開始（従来の互換性のため残す、内部的にplaceBetとpullLeverを呼び出す）
-     */
-    startGame() {
-        // 既存のゲームが進行中なら中断
-        if (this.gameState === 'spinning') {
-            console.log('リールが回転中のためゲームを開始できません');
-            return false;
-        }
-
-        // BETが未実行の場合は実行
-        if (this.gameState === 'ready') {
-            if (!this.placeBet()) {
-                return false;
-            }
-        }
-
-        // レバーを引く
-        return this.pullLever();
-    }
-
-    /**
      * 役抽選
      */
     determineWinningCombination() {
